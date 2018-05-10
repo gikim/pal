@@ -1,0 +1,25 @@
+clear
+set mem 500m
+cd "F:\4.1\985\985d\"
+
+use "Data\Datasets\PFS_Selected.dta", clear
+
+sum gps_n2
+generate private_gpsn = gps_n2
+replace private_gpsn = . if gps_n2 == -777
+replace private_gpsn = . if gps_n2 == -666
+sum private_gpsn
+
+sum gps_e2
+generate private_gpse = gps_e2
+replace private_gpse = . if gps_e2 == -777
+replace private_gpse = . if gps_e2 == -666
+sum private_gpse
+
+gen data = 1
+
+local private_center_var private* facid fac_name_e
+keep `private_center_var' data
+
+save "Data\Data_Modified\PFSDataforMerge_Gk1.dta", replace
+
