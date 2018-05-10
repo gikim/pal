@@ -1,0 +1,298 @@
+985d_Paper_Merge_Adult_GK4
+
+* There are 2520 observations in total
+* Merging the household and adult datasets
+* Location ID - fixed effects, clustered around time
+
+clear
+cd "E:\4.1\985\985d\"
+set mem 800m
+
+use "Data\Data_Modified\AdultDataforMerge_GK1.dta", clear
+sort hhid
+save temp, replace
+use "Data\Data_Modified\HouseholdDataforMerge_GK1.dta", clear
+sort hhid
+save temp2, replace
+use temp
+merge hhid using temp2
+tab _merge
+save "Data\Data_Modified\AHMergedData", replace
+
+* AH = Adult Household Data for Merge
+* 2520 observations total, after merge
+
+* Merging the dataset with the public health center dataset
+
+use "Data\Data_Modified\AHMergedData.dta", clear
+ssc install mmerge
+sort data
+save temp, replace
+use "Data\Data_Modified\PBSDataforMerge_GK1.dta", clear
+sort data
+save temp2, replace
+use temp
+mmerge data using temp2, type(n:n)
+tab _merge
+sort adult_id
+save temp3, replace
+save "Data\Data_Modified\AHPDataMerged_GK1.dta", replace
+
+* There should be 446040 observations
+
+* AHP = Adult Household Public Health Center
+* Editing the final dataset
+
+* Public Clinics
+use "Data\Data_Modified\AHPDataMerged_GK1.dta", clear
+
+gen public_dist = sqrt((gpsn - housegpsn)^2 + (gpse - housegpse)^2)
+gen public_distkm_mean = 1.855*public_dist
+gen public_distkm_min = public_distkm_mean
+
+foreach outcome in 1 2 3 5 10 20 30 40 50{
+gen no_public_`outcome' = 0
+replace no_public_`outcome' = 1 if public_distkm_mean < `outcome'
+}
+
+local adult_socioec literate edu studying marital married spouse agefirstmarried female motherliterate edumother fatherliterate edufather female7
+
+local adult_health healthlad TBtest TBdiagnosis TByear TBtreatment cough stillcough cold drycough prodcough coughblood spit fever diarrhea bodyache weak vision headache backache vomit worm breath upperab lowerab genul urin ankle hearprob skinprob chestpain memloss fullpar partpar nightsweat weightloss repsym* sym* publicprovider visitedhealthprovider day month year height weight BMI heavyitem sbp dbp pulsebp hypertension hypotension hemocue lowhb bodytemp squat peakflow
+
+local household_socioec hhid housegpsn housegpse locationid elect livestock conexp sickperson hhsize pc _Ilocationi_* number_older number_younger cat strata perswt twomeals
+
+* hhsize
+
+local public_center_var facid facname factype interviewer gpsn gpse facilitytype novillages healthissues disthomefacility distPHC nopeople staffhomedoc staffhomenurse staffhomepharmacist chc phc aidpost subcentre offsched reghrs transportonfoot treatathome fractdocswork fractcompounderswork fractpharmacistswork fractmultiwork fractANMwork fractstaffnurseswork fractlhvwork fractlabwork fractradiowork fractdivwor fractsectwork fractdriverwork fractfourthwork
+
+collapse (sum) no_public_* (min) public_distkm_min (mean) public_distkm_mean `adult_socioec' `adult_health' `household_socioec' `public_center_var', by(adult_id)
+
+* rcode
+
+save "Data\Data_Modified\AHPDataMerged_Collapsed_GK1.dta", replace
+
+use "Data\Data_Modified\PFSDataforMerge_GK1.dta", clear
+gen data = 1
+sort data
+save temp4, replace
+use "Data\Data_Modified\AHPDataMerged_Collapsed_GK1.dta", clear
+save temp5
+mmerge data using temp4, type(n:n)
+tab _merge
+sort adult_id
+save "Data\Data_Modified\AHPPDataMerged_GK1.dta", replace
+
+use "Data\Data_Modified\AHPPDataMerged_GK1.dta", clear
+
+* Private Clinics
+gen private_dist = sqrt((private_gpsn - housegpsn)^2 + (private_gpse - housegpse)^2)
+gen private_distkm = 1.855*private_dist
+gen private_distkm_min = private_distkm
+
+foreach outcome in 1 2 3 5 10 20 30 40 50{
+gen no_private_`outcome' = 0
+replace no_private_`outcome' = 1 if private_distkm < `outcome'
+}
+
+* Keep adult, household, pbs, etc. kept variables
+
+local adult_socioec literate edu studying marital married spouse agefirstmarried female motherliterate edumother fatherliterate edufather female7
+
+local adult_health healthlad TBtest TBdiagnosis TByear TBtreatment cough stillcough cold drycough prodcough coughblood spit fever diarrhea bodyache weak vision headache backache vomit worm breath upperab lowerab genul urin ankle hearprob skinprob chestpain memloss fullpar partpar nightsweat weightloss repsym* sym* publicprovider visitedhealthprovider day month year height weight BMI heavyitem sbp dbp pulsebp hypertension hypotension hemocue lowhb bodytemp squat peakflow
+
+local household_socioec hhid housegpsn housegpse locationid elect livestock conexp sickperson hhsize pc data _Ilocationi_* number_older number_younger cat strata perswt twomeals
+
+* hhsize
+
+local public_center_var facid facname factype interviewer gpsn gpse facilitytype novillages healthissues disthomefacility distPHC nopeople staffhomedoc staffhomenurse staffhomepharmacist chc phc aidpost subcentre offsched reghrs transportonfoot treatathome fractdocswork fractcompounderswork fractpharmacistswork fractmultiwork fractANMwork fractstaffnurseswork fractlhvwork fractlabwork fractradiowork fractdivwor fractsectwork fractdriverwork fractfourthwork
+
+local private_center_var private* facid fac_name_e
+
+collapse (sum) no_private_* (min) private_distkm_min (mean) `adult_socioec' `adult_health'  adult_id hhid rcode `household_socioec' `public_center_var' data' `private_center_var' data `private_distkm', by(adult_id)
+
+sort adult_id
+save "Data\Data_Modified\AHPPDataMerged_Collapsed_GK1.dta", replace
+
+use "Data\Data_Modified\AHPPDataMerged_Collapsed_GK1.dta", clear
+
+* Public Dataset
+* Marginal effects of distance. Incremental distance to nearest clinic
+* Clinic within 1 km
+gen public_1 = 0
+replace public_1 = 1 if public_distkm_min < 1
+* Clinic within 2 km
+gen public_2 = 0
+replace public_2 = 1 if public_distkm_min < 2
+* Clinic within 3 km
+gen public_3 = 0
+replace public_3 = 1 if public_distkm_min < 3
+* Clinic within 4 km
+gen public_4 = 0
+replace public_4 = 1 if public_distkm_min < 4
+* Clinic within 5 km
+gen public_5 = 0
+replace public_5 = 1 if public_distkm_min < 5
+
+* Private Dataset
+gen private_1 = 0
+replace private_1 = 1 if private_distkm_min < 1
+
+* Clinic within 2 km
+gen private_2 = 0
+replace private_2 = 1 if private_distkm_min < 2
+
+* Clinic within 3 km
+gen private_3 = 0
+replace private_3 = 1 if private_distkm_min < 3
+
+* Clinic within 4 km
+gen private_4 = 0
+replace private_4 = 1 if private_distkm_min < 4
+
+* Clinic within 5 km
+gen private_5 = 0
+replace private_5 = 1 if private_distkm_min < 5
+
+* Variable generation
+gen logconexp = log(conexp)
+
+gen lceclinics = logconexp*nearclinicC
+gen dclinic = distkm*nearclinicC
+
+* Clinic within 2 km
+gen 2kmcl = 0
+replace 2kmcl = 1 if public_distkm_min < 2
+
+gen group2km = 0
+replace group2km = 1 if public_distkm_min < 2
+
+save "Data\Data_Modified\AHPPDataMerged_Collapsed_NewVar_GK1.dta", replace
+
+
+
+
+
+
+----------
+
+* Run AdultData, HouseholdData, PBSData, Merge dofiles
+
+
+* Other code
+
+
+gen nearclinic = 0
+replace nearclinic = 1 if public_distkm < 10
+gen nearclinicA = 0
+replace nearclinicA = 1 if public_distkm < 5
+gen nearclinicB = 0
+replace nearclinicB = 1 if public_distkm < 3
+gen nearclinicC = 0
+replace nearclinicC = 1 if public_distkm < 2
+gen nearclinicD = 0
+replace nearclinicD = 1 if public_distkm < 1
+gen nearclinic2 = 0
+replace nearclinic2 = 1 if public_distkm < 20
+gen nearclinic3 = 0
+replace nearclinic3 = 1 if public_distkm < 30
+gen nearclinic4 = 0
+replace nearclinic4 = 1 if public_distkm < 40
+gen nearclinic5 = 0
+replace nearclinic5 = 1 if public_distkm < 50
+
+gen no_private_1 = 0
+replace no_private_1 = 1 if private_distkm < 1
+
+gen no_private_2 = 0
+gen no_private_2 = 1 if private_distkm < 2
+
+gen no_private_2 = private_distkm < 2
+
+gen private_center = 0
+
+* collapse (sum) no_* (min) private_distkm_min public_distkm_min (mean) literate edu studying marital married spouse agefirstmarried female motherliterate edumother fatherliterate edufather female7 healthlad TBtest TBdiagnosis TByear TBtreatment cough stillcough cold drycough prodcough coughblood spit fever diarrhea bodyache weak vision headache backache vomit worm breath upperab lowerab genul urin ankle hearprob skinprob chestpain memloss fullpar partpar nightsweat weightloss maleselfrep femaleselfrep fractmaleselfrep fractfemaleselfrep publicprovider visitedhealthprovider day month year height weight BMI heavyitem sbp dbp pulsebp hypertension hypotension hemocue lowhb bodytemp squat peakflow facid facname factype gps_n1 gps_n2 gps_e1 gps_e2 interviewer gpsn gpse facilitytype novillages healthissues disthomefacility distPHC nopeople staffhomedoc staffhomenurse staffhomepharmacist chc phc aidpost subcentre hhid housegpsn housegpse locationid elect livestock conexp sickperson hhsize pc data _Ilocationi_* number_older number_younger cat strata hhsize perswt twomeals, by(adult_id)
+
+* nearclinic nearclinicA nearclinicB nearclinicC nearclinicD nearclinic2 nearclinic3 nearclinic4 nearclinic5
+
+* dropped wearing
+
+
+
+* Total . * Adult Data: keep k7 k9_1 k9_2 k9_3 sbp dbp pulse lowhb healthlad squat adult_id hhid literate edu studying marital married spouse agefirstmarried female motherliterate edumother fatherliterate edufather publicprovider visitedhealthprovider TBtest TBdiagnosis TByear TBtreatment cough stillcough hypertension * PBS Data: keep facid facname factype gps_n1 gps_n2 gps_e1 gps_e2 interviewer gpsn gpse facilitytype novillages healthissues disthomefacility distPHC nopeople staffhomedoc staffhomenurse staffhomepharmacist chc phc aidpost subcentre * Household Data: keep hhid housegpsn housegpse locationid elect livestock conexp sickperson hhsize pc data _Ilocationi_* number_older number_younger cat strata hhsize perswt twomeals
+
+
+* Should have observations
+
+* Merging AHPDataMerged with the dataset with adult and household merged with all variables. Necessary?
+* use "Data\Data_Modified\AHPDataMergedII_GK1.dta", replace
+* sort adult_id
+* save temp, replace
+* cd
+* use "Data\Data_Modified\adulthouseholddatamerged.dta", clear
+* drop _merge
+* sort adult_id
+* save temp2, replace
+* use temp
+* merge adult_id using temp2
+* sort adult_id
+* save "Data\Data_Modified\AHPDataNewVarI_GK1.dta", replace
+
+* editing the new dataset - adding new variables
+
+* using the correct commands? Impossible to do since the clinic characteristics can't have any effect. insert public health clinic data into each
+* Merging AHPDataNewVarI_GK1.dta with dataset with all the public health variables
+* drop _merge
+* sort facid
+* save temp, replace
+* use "Data\Data_Modified\PBSData_GK1.dta", clear
+* sort facid
+* save temp2, replace
+* use temp
+* merge facid using temp2
+* sort adult_id
+
+* use "Data\Data_Modified\AHPDataMerged_Collapsed_GK1.dta", clear
+
+
+* Distance variables
+gen group1 = 0
+replace group1 = 1 if nearclinic >= 7
+gen group5km = 1
+replace group5km = 0 if nearclinicA == 0
+gen group3km = 1
+replace group3km = 0 if nearclinicB == 0
+gen group2km = 1
+replace group2km = 0 if nearclinicC  == 0
+gen group1km = 1
+replace group1km = 0 if nearclinicD  == 0
+
+* Gradation
+gen onekm = 1
+replace onekm = 0 if nearclinicD == 0
+
+* Was nearclinicD greater than 2 km?
+
+* Clinic within 1-2 km
+gen twokm = 1
+replace twokm = 0 if nearclinicC == 0
+replace twokm = 0 if nearclinicD >= 1
+
+* Clinic within 2-3 km
+gen threekm = 1
+replace threekm = 0 if nearclinicB == 0
+replace threekm = 0 if nearclinicC >= 1
+replace threekm = 0 if nearclinicD >= 1
+
+* Clinic greater than 3 km away
+gen minthreekm = 1
+replace minthreekm = 0 if nearclinicB >= 1
+replace minthreekm = 0 if nearclinicC >= 1
+replace minthreekm = 0 if nearclinicD >= 1
+
+* Clinic within 3-5 km
+gen fivekm = 1
+replace fivekm = 0 if nearclinicA == 0
+replace fivekm = 0 if nearclinicB >= 0
+replace fivekm = 0 if nearclinicC >= 0
+replace fivekm = 0 if nearclinicD >= 0
+
