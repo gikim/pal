@@ -1,0 +1,162 @@
+* Merge household and child datasets
+* Control for the location ID - that would do place fixed effects, which are clustered around time.
+
+clear
+set mem 500m
+
+use "Data\Data_Modified\ChildDataforMerge_GK1.dta", clear
+compress
+save temp, replace
+cd
+use "Data\Data_Modified\HouseholdDataforMerge_GK1.dta", clear
+sort hhid
+save temp2, replace
+use temp
+merge hhid using temp2
+tab _merge
+save "Data\Data_Modified\CHDataMerged.dta", replace
+
+* 2641 observations
+
+* Merge with Public health center dataset
+ssc install mmerge
+use "Data\Data_Modified\CHDataMerged.dta", clear 
+compress
+gen data = 1
+sort data
+save temp, replace 
+use "Data\Data_Modified\PBSDataforMerge_GK1.dta", clear
+gen data = 1
+sort data
+save temp2, replace
+use temp
+mmerge data using temp2, type(n:n)
+tab _merge
+sort child_id
+save "Data\Data_Modified\CHPDataMerged_GK1.dta", replace
+* There should be 467457 observations since there are 177 clinics. 177*2641 = 467457
+
+* Editing the final dataset
+
+use "Data\Data_Modified\CHPDataMerged_GK1.dta", clear
+compress
+
+gen public_dist = sqrt((gpsn - housegpsn)^2 + (gpse - housegpse)^2)
+gen public_distkm_mean = 1.855*public_dist
+gen public_distkm_min = public_distkm_mean
+
+* 156 clinics with defined distance for each child id
+* finding the minimum distance for each child_id?
+
+foreach outcome in 1 2 3 5 10 20 30 40 50{
+gen no_public_`outcome' = 0
+replace no_public_`outcome' = 1 if public_distkm_mean < `outcome'
+}
+
+
+save "Data\Data_Modified\AHPDataMerged_Collapsed_GK1.dta", replace
+
+local child_health bcg dpt opv measles polio immunized imcard mobfed lowhb healthlad diarrhea vomit retarded handi squat tbtest tb tbtime tbtreat cough coughcontinues coughtwoweeks inschool medpay feelbetter medication medfinished otherconsult consulttype doctype nursetype govdn publicprovider data k1 k2 k9_1 k9_2 k9_3 household_member
+
+local household hhid number_older number_younger cat strata perswt housegpsn housegpse locationid _Ilocationi_* elect livestock conexp logconexp sickperson twomeals
+
+* hhsize
+* facname factype
+
+local public_center facid gpsn gpse facilitytype* novillages healthissues* disthomefacility distPHC nopeople offsched reghrs transportonfoot treatathome staff* fract*
+
+collapse (sum) no_public_* (min) public_distkm_min (mean) public_distkm_mean `child_health' `household' `public_center', by(child_id)
+
+gen data = 1
+
+collapse (sum) no_public_* (min) public_distkm_min (mean) public_distkm_mean `child_health' `household_socioec' `public_center_var'
+data ccode age locationid child_id, by(child_id)
+
+save "Data\Data_Modified\CHPDataMerged_Collapsed_GK1.dta", replace
+
+* Should have 2641 observations
+* Merging CHPDataMerged with the dataset with child and household merged with all variables
+
+use "Data\Data_Modified\CHPDataMerged_Collapsed_GK1.dta", replace
+gen data = 1
+sort data
+save temp4, replace
+use "Data\Data_Modified\PFSDataforMerge_Gk1.dta", clear
+gen data = 1
+sort data
+save temp5, replace
+use temp4
+mmerge data using temp5, type(n:n)
+tab _merge
+sort child_id
+save "Data\Data_Modified\CHPPDataMerged_GK1.dta", replace
+
+use "Data\Data_Modified\CHPPDataMerged_GK1.dta", clear
+
+* Private Clinics
+gen private_dist = sqrt((private_gpsn - housegpsn)^2 + (private_gpse - housegpse)^2)
+gen private_distkm_mean = 1.855*dist
+gen private_distkm_min = private_distkm_mean
+
+foreach outcome in 1 2 3 5 10 20 30 40 50{
+gen no_private_`outcome' = 0
+replace no_private_`outcome' = 1 if private_distkm < `outcome'
+}
+
+local child_health bcg dpt opv measles polio immunized imcard mobfed lowhb healthlad diarrhea vomit retarded handi squat tbtest tb tbtime tbtreat cough coughcontinues coughtwoweeks inschool medpay feelbetter medication medfinished otherconsult consulttype doctype nursetype govdn publicprovider data k1 k2 k9_1 k9_2 k9_3 household_member
+
+local household_socioec hhid housegpsn housegpse locationid elect livestock conexp sickperson hhsize pc data _Ilocationi_* number_older number_younger cat strata perswt twomeals
+
+* hhsize
+
+local public_center_var facid interviewer gpsn gpse facilitytype novillages healthissues disthomefacility distPHC nopeople staffhomedoc staffhomenurse staffhomepharmacist chc phc aidpost subcentre offsched reghrs transportonfoot treatathome fractdocswork fractcompounderswork fractpharmacistswork fractmultiwork fractANMwork fractstaffnurseswork fractlhvwork fractlabwork fractradiowork fractdivwor fractsectwork fractdriverwork fractfourthwork
+
+* facname factype
+
+gen data = 1
+
+collapse (sum) no_private_* (min) private_distkm_min (mean) no_public_* public_distkm_min public_distkm_mean `child_health' `household_socioec' `public_center_var' data ccode age locationid, by(child_id)
+
+sort adult_id
+save "Data\Data_Modified\CHPPDataMerged_Collapsed_GK1.dta", replace
+
+* editing the new dataset - adding new variables
+use "Data\Data_Modified\CHPPDataMerged_Collapsed_GK1.dta", clear
+
+* Public Dataset
+* Marginal effects of distance. Incremental distance to nearest clinic
+
+* Clinic within x km
+foreach no in 1 2 3 4 5 {
+gen public_`no' = 0
+replace public_`no' = 1 if public_distkm_min < `no'
+}
+
+* Private Dataset
+
+* Clinic within x km
+foreach no in 1 2 3 4 5 {
+gen private_`no' = 0
+replace private_`no' = 1 if private_distkm_min < `no'
+}
+
+foreach outcome in 1 2 3 5 10 20 30 40 50{
+gen no_private_`outcome' = 0
+replace no_private_`outcome' = 1 if private_distkm < `outcome'
+}
+
+* Variable generation
+gen logconexp = log(conexp)
+
+gen lceclinics = logconexp
+gen dkmnclinic = distkm
+
+local public_center_var facid facname factype interviewer gpsn gpse facilitytype novillages healthissues disthomefacility distPHC nopeople staffhomedoc staffhomenurse staffhomepharmacist chc phc aidpost subcentre offsched reghrs transportonfoot treatathome fractdocswork fractcompounderswork fractpharmacistswork fractmultiwork fractANMwork fractstaffnurseswork fractlhvwork fractlabwork fractradiowork fractdivwor fractsectwork fractdriverwork fractfourthwork
+
+collapse (sum) no_* (min) public_distkm_min (mean) `adult_socioec' `adult_health'  adult_id rcode `household_socioec' `public_center_var' data `public_distkm' `public_distkm_min' `no_public_`outcome''
+
+save "Data\Data_Modified\AHPPDataMerged_Collapsed_NewVar_GK1.dta", replace
+
+
+
+* Keep adult, household, pbs, etc. kept variables
