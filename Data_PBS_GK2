@@ -1,0 +1,129 @@
+* Public Health Center
+
+set mem 500m
+cd "F:\4.1\985\985d\"
+
+use "Data\Datasets\PBSData.dta", clear
+
+sum gps_n2
+generate gpsn = gps_n2
+replace gpsn = . if gpsn == -777
+
+sum gps_e2
+generate gpse = gps_e2
+replace gpse = . if gpse == -777
+
+* Type of facility
+rename pb01 facilitytype
+replace facilitytype = . if facilitytype == 996
+
+* Dummies for facility type
+
+foreach no in 1 2 3 4{
+gen facilitytype_`no' = 0
+replace facilitytype_`no' = 1 if facilitytype == `no'
+}
+
+* 1 chc - community health centers, 2 phc, 3 aidpost, 4 subcentre under phc domain
+
+* # Villages facility serves
+rename pb02 novillages
+* health issues that camps address
+
+foreach no in 1 2 3 4 5 996{
+gen healthissues_`no' = pb213_`no'
+replace healthissues_`no' = . if pb213_`no' == -777
+}
+
+* 1: Family Planning, 2: immunization/vaccination, 3: STDs/RTI, 4: General Health, 5: Eyes/vision, 996: Other
+
+* PB2.18. How far from the facility is this staff member's home?
+* How far medical officer's home is from facility
+rename pb218_1 disthomefacility
+
+* # people facility serves. How many people does this facility serve?
+rename pb016 nopeople
+
+* How far is the facility from the PHC that heads this clinic?
+gen distPHC = pb05
+sum distPHC
+
+* People working in the facility
+sum pb11_a pb12_a pb13_a pb14_a pb15_a pb16_a pb17_a pb18_a pb19_a pb110_a pb111_a pb112_a pb113_a pb114_a
+sum pb11_b pb12_b pb13_b pb14_b pb15_b pb16_b pb17_b pb18_b pb19_b pb110_b pb111_b pb112_b pb113_b pb114_b
+sum pb11_c pb12_c pb13_c pb14_c pb15_c pb16_c pb17_c pb18_c pb19_c pb110_c pb111_c pb112_c pb113_c pb114_c
+sum pb11_d pb12_d pb13_d pb14_d pb15_d pb16_d pb17_d pb18_d pb19_d pb110_d pb111_d pb112_d pb113_d pb114_d
+sum pb11_e pb12_e pb13_e pb14_e pb15_e pb16_e pb17_e pb18_e pb19_e pb110_e pb111_e pb112_e pb113_e pb114_e
+sum pb11_f pb12_f pb13_f pb14_f pb15_f pb16_f pb17_f pb18_f pb19_f pb110_f pb111_f pb112_f pb113_f pb114_f
+sum pb11_g pb12_g pb13_g pb14_g pb15_g pb16_g pb17_g pb18_g pb19_g pb110_g pb111_g pb112_g pb113_g pb114_g
+sum pb11_h pb12_h pb13_h pb14_h pb15_h pb16_h pb17_h pb18_h pb19_h pb110_h pb111_h pb112_h pb113_h pb114_h
+sum pb11_i pb12_i pb13_i pb14_i pb15_i pb16_i pb17_i pb18_i pb19_i pb110_i pb111_i pb112_i pb113_i pb114_i
+sum pb11_j pb12_j pb13_j pb14_j pb15_j pb16_j pb17_j pb18_j pb19_j pb110_j pb111_j pb112_j pb113_j pb114_j
+sum pb11_k pb12_k pb13_k pb14_k pb15_k pb16_k pb17_k pb18_k pb19_k pb110_k pb111_k pb112_k pb113_k pb114_k
+sum pb11_l pb12_l pb13_l pb14_l pb15_l pb16_l pb17_l pb18_l pb19_l pb110_l pb111_l pb112_l pb113_l pb114_l
+sum pb11_m pb12_m pb13_m pb14_m pb15_m pb16_m pb17_m pb18_m pb19_m pb110_m pb111_m pb112_m pb113_m pb114_m
+
+gen fractdocswork = pb11_a/pb114_a
+gen fractcompounderswork = pb11_b/pb114_b
+gen fractpharmacistswork = pb11_c/pb114_c
+gen fractmultiwork = pb11_d/pb114_d
+gen fractANMwork = pb11_e/pb114_e
+gen fractstaffnurseswork = pb11_f/pb114_f
+gen fractlhvwork = pb11_g/pb114_g
+gen fractlabwork = pb11_h/pb114_h
+gen fractradiowork = pb11_i/pb114_i
+gen fractdivwork = pb11_j/pb114_j
+gen fractsectwork = pb11_k/pb114_k
+gen fractdriverwork = pb11_l/pb114_l
+gen fractfourthwork = pb11_m/pb114_m
+
+* facility follow official schedule of opening and closing times?
+gen offsched = .
+replace offsched = 1 if pb23 == 1
+replace offsched = 2 if pb23 == 0
+
+* facility have regular hours?
+gen reghrs = .
+replace reghrs = 1 if pb24 == 1
+replace reghrs = 0 if pb24 == 2
+
+* Mode of transportation. What does the patient use to travel to the nearest facility?
+
+* PB2.58_1
+gen transportonfoot = 0
+foreach no in 1 2 3 4 5 6{
+replace transportonfoot = 1 if pb258_`no'_6 == 1
+}
+
+* Measuring the "motivation" of the health workers
+
+* Does any staff member treat patients in his/her home (either as part of this same job or as part of another job?
+gen treatathome = .
+replace treatathome = 1 if pb214 == 1
+replace treatathome = 0 if pb214 == 2
+
+* How many staff members treat patients in their home (either as part of this same job or as part of another job)?
+* gen notreatathome = pb2_15
+* replace notreatathome = . if pb2_15 == -777
+
+* designation of the staff member who treats patients in his/her home?
+
+gen staffhomedoc = 0
+replace staffhomedoc = 1 if pb217_1 == 1 | pb217_2 == 1 | pb217_3 == 1 | pb217_4 == 1 | pb217_5 == 1 | pb217_6 == 1 | pb217_7 == 1 | pb217_8 == 1 | pb217_9 == 1 | pb217_10 == 1
+
+gen staffhomenurse = 0
+replace staffhomenurse = 1 if pb217_1 == 2 | pb217_2 == 2 | pb217_3 == 2 | pb217_4 == 2 | pb217_5 == 2 | pb217_6 == 2 | pb217_7 == 2 | pb217_8 == 2 | pb217_9 == 2 | pb217_10 == 2
+
+gen staffhomepharmacist = 0
+replace staffhomepharmacist = 1 if pb217_1 == 3 | pb217_2 == 3 | pb217_3 == 3 | pb217_4 == 3 | pb217_5 == 3 | pb217_6 == 3 | pb217_7 == 3 | pb217_8 == 3 | pb217_9 == 3 | pb217_10 == 3
+
+* staff absentee rates
+* Smaller dataset for the merge
+* staffhomedoc staffhomenurse staffhomepharmacist fractdocswork fractcompounderswork fractpharmacistswork fractmultiwork fractANMwork fractstaffnurseswork fractlhvwork fractlabwork fractradiowork fractdivwor fractsectwork fractdriverwork fractfourthwork
+
+local public_center facid facname factype interviewer gpsn gpse facilitytype* novillages healthissues* disthomefacility distPHC nopeople offsched reghrs transportonfoot treatathome staff* fract*
+
+keep `public_center'
+gen data = 1
+
+save "Data\Data_Modified\PBSDataforMerge_GK1.dta", replace
