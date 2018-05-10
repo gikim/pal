@@ -1,0 +1,136 @@
+* 985d_Paper_Merge_Adult_GK5
+
+* 2520 observations in total
+* Merge household and adult datasets
+* Location ID - fixed effects, clustered around time
+
+clear
+cd "E:\4.1\985\985d\"
+set mem 800m
+use "Data\Data_Modified\AdultDataforMerge_GK1.dta", clear
+save temp, replace
+sort hhid
+use "Data\Data_Modified\HouseholdDataforMerge_GK1.dta", clear
+sort hhid
+save temp2, replace
+use temp
+merge hhid using temp2
+tab _merge
+save "Data\Data_Modified\AHMergedData", replace
+
+* AH = Adult Household Data for Merge
+* 2520 observations total, after merge
+
+* Merging the dataset with the public health center dataset
+
+use "Data\Data_Modified\AHMergedData.dta", clear
+ssc install mmerge
+sort data
+save temp, replace
+use "Data\Data_Modified\PBSDataforMerge_GK1.dta", clear
+sort data
+save temp2, replace
+use temp
+mmerge data using temp2, type(n:n)
+tab _merge
+sort adult_id
+save temp3, replace
+save "Data\Data_Modified\AHPDataMerged_GK1.dta", replace
+
+* 446040 observations
+
+* AHP = Adult Household Public Health Center
+* Editing the final dataset
+
+* Public Clinics
+use "Data\Data_Modified\AHPDataMerged_GK1.dta", clear
+compress
+
+gen public_dist = sqrt((gpsn - housegpsn)^2 + (gpse - housegpse)^2)
+gen public_distkm_mean = 1.855*public_dist
+gen public_distkm_min = public_distkm_mean
+
+foreach outcome in 1 2 3 5 10 20 30 40 50{
+gen no_public_`outcome' = 0
+replace no_public_`outcome' = 1 if public_distkm_mean < `outcome'
+}
+
+local adult_socioec literate edu studying marital married spouse agefirstmarried female motherliterate edumother fatherliterate edufather female7
+
+local adult_health healthlad TBtest TBdiagnosis TByear TBtreatment cough stillcough repsym* sym* publicprovider visitedhealthprovider day month year height weight BMI heavyitem pulsebp hypertension hypotension hemocue lowhb bodytemp squat peakflow
+
+local household hhid number_older number_younger cat strata perswt housegpsn housegpse locationid _Ilocationi_* elect livestock conexp logconexp sickperson twomeals
+
+* hhsize
+* facname factype
+
+local public_center facid gpsn gpse facilitytype* novillages healthissues* disthomefacility distPHC nopeople offsched reghrs transportonfoot treatathome staff* fract*
+
+collapse (sum) no_public_* (min) public_distkm_min (mean) public_distkm_mean `adult_socioec' `adult_health' `household' `public_center', by(adult_id)
+
+save "Data\Data_Modified\AHPDataMerged_Collapsed_GK1.dta", replace
+
+clear
+set mem 900m
+
+use "Data\Data_Modified\PFSDataforMerge_GK1.dta", clear
+gen data = 1
+sort data
+save temp, replace
+use "Data\Data_Modified\AHPDataMerged_Collapsed_GK1.dta", clear
+gen data = 1
+mmerge data using temp, type(n:n)
+tab _merge
+sort adult_id
+save "Data\Data_Modified\AHPPDataMerged_GK1.dta", replace
+
+use "Data\Data_Modified\AHPPDataMerged_GK1.dta", clear
+compress
+
+* Private Clinics
+gen private_dist = sqrt((private_gpsn - housegpsn)^2 + (private_gpse - housegpse)^2)
+gen private_distkm_mean = 1.855*private_dist
+gen private_distkm_min = private_distkm_mean
+
+foreach outcome in 1 2 3 5 10 20 30 40 50{
+gen no_private_`outcome' = 0
+replace no_private_`outcome' = 1 if private_distkm_mean < `outcome'
+}
+
+* Keep adult, household, pbs, etc. kept variables
+
+local adult_socioec literate edu studying marital married spouse agefirstmarried female motherliterate edumother fatherliterate edufather
+
+local adult_health healthlad TBtest TBdiagnosis TByear TBtreatment cough stillcough repsym* sym* publicprovider visitedhealthprovider height weight BMI heavyitem pulsebp hypertension hypotension hemocue lowhb bodytemp squat peakflow
+
+local household hhid number_older number_younger cat strata perswt housegpsn housegpse locationid _Ilocationi_* elect livestock conexp logconexp sickperson twomeals
+
+* hhsize
+* facname factype
+
+local public_center facid gpsn gpse facilitytype* novillages healthissues* disthomefacility distPHC nopeople offsched reghrs transportonfoot treatathome staff* fract*
+
+collapse (sum) no_private_* no_public_* (min) private_distkm_min public_distkm_min (mean) public_distkm_mean private_distkm_mean `adult_socioec' `adult_health' `household' `public_center', by(adult_id)
+
+sort adult_id
+save "Data\Data_Modified\AHPPDataMerged_Collapsed_GK1.dta", replace
+
+use "Data\Data_Modified\AHPPDataMerged_Collapsed_GK1.dta", clear
+compress
+
+* Public Dataset
+* Marginal effects of distance. Incremental distance to nearest clinic
+
+foreach no in 1 2 3 4 5{
+gen public_`no' = 0
+replace public_`no' = 1 if public_distkm_min < `no'
+}
+
+* Private
+
+foreach no in 1 2 3 4 5{
+gen private_`no' = 0
+replace private_`no' = 1 if private_distkm_min < `no'
+}
+
+save "Data\Data_Modified\AHPPDataMerged_Collapsed_NewVar_GK1.dta", replace
